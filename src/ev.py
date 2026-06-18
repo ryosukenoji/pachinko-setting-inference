@@ -43,6 +43,57 @@ def slot_decision(
     }
 
 
+def slot_yen_ev(
+    posterior: Mapping[int, float],
+    payout: Mapping,
+    games: int,
+    bet_per_game: int = 3,
+    yen_per_coin: float = 20.0,
+) -> Dict:
+    """事後 × 機械割 → 想定遊技数での円建て期待収支と、設定不確実性による分布。
+
+    機械割 M%(設定k) = 払出コイン / 投入コイン × 100 なので、
+        投入コイン = bet_per_game × games
+        純増コイン(k) = 投入コイン × (M_k/100 - 1)
+        円(k) = 純増コイン(k) × yen_per_coin
+        期待収支 = Σ post_k × 円(k)
+
+    Args:
+        games: これから回す予定のゲーム数。
+        bet_per_game: 1ゲームの掛けコイン（ジャグラー等は3枚）。
+        yen_per_coin: 換金レート（円/枚）。等価=20。
+
+    返り値の per_setting で「設定不確実性に由来する収支の幅」を、prob_plus で
+    「プラス収支になる確率」を示す。**1セッション内の短期分散（ヒキ）は含まない**
+    （これは設定が確定していても残る別物で、短期では支配的。caveat 参照）。
+    """
+    total_bet = bet_per_game * games
+    per = []
+    for k in sorted(posterior):
+        m = float(payout.get(str(k), payout.get(k)))
+        net_coins = total_bet * (m / 100.0 - 1.0)
+        per.append({
+            "setting": k,
+            "prob": posterior[k],
+            "payout": m,
+            "yen": net_coins * yen_per_coin,
+        })
+    exp_yen = sum(p["prob"] * p["yen"] for p in per)
+    return {
+        "games": games,
+        "bet_per_game": bet_per_game,
+        "yen_per_coin": yen_per_coin,
+        "total_bet_coins": total_bet,
+        "total_bet_yen": total_bet * yen_per_coin,
+        "expected_yen": exp_yen,
+        "prob_plus": sum(p["prob"] for p in per if p["yen"] > 0),
+        "per_setting": per,
+        "best": max(per, key=lambda x: x["yen"]),
+        "worst": min(per, key=lambda x: x["yen"]),
+        "caveat": "設定不確実性のみ反映。1セッションの短期分散（ヒキ）は別途で、短期では支配的。",
+    }
+
+
 def pachinko_border_decision(
     spins_per_1k: float,
     borderline: float,

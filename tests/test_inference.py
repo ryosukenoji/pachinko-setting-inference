@@ -124,6 +124,29 @@ class TestEV(unittest.TestCase):
         self.assertTrue(ev_mod.pachinko_border_decision(19.5, 18.2)["play"])
         self.assertFalse(ev_mod.pachinko_border_decision(17.0, 18.2)["play"])
 
+    def test_yen_ev_setting6_matches_hand_calc(self):
+        # 全質量が設定6(109.4%)、5000G・3枚・20円/枚:
+        # net = 3*5000*(1.094-1) = 1410枚 → 28,200円
+        post = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 1.0}
+        res = ev_mod.slot_yen_ev(post, self.model["payout"], games=5000,
+                                 bet_per_game=3, yen_per_coin=20.0)
+        self.assertAlmostEqual(res["expected_yen"], 28200.0, places=2)
+        self.assertAlmostEqual(res["prob_plus"], 1.0, places=9)
+
+    def test_yen_ev_low_setting_negative(self):
+        post = {1: 1.0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}  # 設定1=97.0%
+        res = ev_mod.slot_yen_ev(post, self.model["payout"], games=5000)
+        self.assertLess(res["expected_yen"], 0)
+        self.assertAlmostEqual(res["prob_plus"], 0.0, places=9)
+
+    def test_yen_ev_expectation_over_posterior(self):
+        # 期待収支は per_setting の事後加重和に一致
+        post = {1: 0.2, 2: 0.2, 3: 0.2, 4: 0.2, 5: 0.1, 6: 0.1}
+        res = ev_mod.slot_yen_ev(post, self.model["payout"], games=3000)
+        manual = sum(p["prob"] * p["yen"] for p in res["per_setting"])
+        self.assertAlmostEqual(res["expected_yen"], manual, places=6)
+        self.assertGreaterEqual(res["best"]["yen"], res["worst"]["yen"])
+
 
 class TestValidationDiscipline(unittest.TestCase):
     """検証規律そのものが機能することを（軽量設定で）確認する。"""

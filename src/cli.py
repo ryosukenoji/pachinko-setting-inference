@@ -68,8 +68,28 @@ def cmd_infer(args) -> int:
     print(f"  期待機械割: {dec['expected_payout']:.2f}%  (閾値 {dec['threshold']:.1f}%)")
     print(f"  判定: {'打つ (+EV)' if dec['play'] else 'やめ (-EV)'}  edge={dec['edge_pct']:+.2f}pt")
 
+    yen = None
+    if args.play_games:
+        yen = ev_mod.slot_yen_ev(post, model["payout"], args.play_games,
+                                 bet_per_game=args.bet, yen_per_coin=args.coin_yen)
+        print(f"--- 円建て期待収支（あと {args.play_games:,}G 回す想定 / "
+              f"{args.bet}枚掛け / {args.coin_yen:g}円per枚） ---")
+        print(f"  期待収支: {yen['expected_yen']:+,.0f}円   "
+              f"プラス収支確率: {_fmt_pct(yen['prob_plus'])}")
+        b, w = yen["best"], yen["worst"]
+        print(f"  設定不確実性による幅: 最悪 設定{w['setting']} {w['yen']:+,.0f}円 "
+              f"〜 最良 設定{b['setting']} {b['yen']:+,.0f}円")
+        print("  設定別内訳（事後 × 機械割 → 収支）:")
+        for p in yen["per_setting"]:
+            print(f"    設定{p['setting']}: {_fmt_pct(p['prob']):>6} × {p['payout']:.1f}% "
+                  f"→ {p['yen']:+,.0f}円")
+        print(f"  ※ {yen['caveat']}")
+
     if args.json:
-        print(json.dumps({"summary": summary, "decision": dec}, ensure_ascii=False, default=str))
+        out = {"summary": summary, "decision": dec}
+        if yen is not None:
+            out["yen_ev"] = yen
+        print(json.dumps(out, ensure_ascii=False, default=str))
     return 0
 
 
@@ -194,6 +214,11 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--threshold", type=float, default=100.0, help="EV判定閾値(機械割%)")
     pi.add_argument("--prior", default=None,
                     help="情報事前: JSON文字列 or ファイルパス（learn の出力を流用可）")
+    pi.add_argument("--play-games", type=int, default=None, dest="play_games",
+                    help="これから回す予定G数。指定で円建て期待収支を出力")
+    pi.add_argument("--bet", type=int, default=3, help="1G掛けコイン（既定3枚）")
+    pi.add_argument("--coin-yen", type=float, default=20.0, dest="coin_yen",
+                    help="換金レート 円/枚（既定20=等価）")
     pi.add_argument("--json", action="store_true")
     pi.set_defaults(func=cmd_infer)
 
