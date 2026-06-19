@@ -191,6 +191,34 @@ class TestEV(unittest.TestCase):
         with self.assertRaises(ValueError):
             ev_mod.session_pnl_distribution(post, {"payout": {}, "events": {}}, games=100)
 
+    def test_spins_to_recover_positive_ev(self):
+        # 設定6(109.4%) 確定、2万円回収: 1Gあたり = 3*(1.094-1)*20 = 5.64円
+        post = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 1.0}
+        rec = ev_mod.spins_to_recover(post, self.model["payout"], 20000)
+        self.assertTrue(rec["recoverable"])
+        self.assertAlmostEqual(rec["per_game_yen"], 3 * 0.094 * 20, places=6)
+        self.assertAlmostEqual(rec["required_games"], 20000 / (3 * 0.094 * 20), places=2)
+
+    def test_spins_to_recover_negative_ev_unrecoverable(self):
+        post = {1: 1.0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}  # 97.0% < 100
+        rec = ev_mod.spins_to_recover(post, self.model["payout"], 20000)
+        self.assertFalse(rec["recoverable"])
+        self.assertIsNone(rec["required_games"])
+
+    def test_daily_plus_grows_for_high_setting(self):
+        res = ev_mod.simulate_fixed_setting_daily(self.model, 6, 8000, [1, 365])
+        ms = {r["day"]: r for r in res["milestones"]}
+        # 高設定はプラス確率が日数とともに増える＆95%到達日数が有限
+        self.assertGreater(ms[365]["prob_plus"], ms[1]["prob_plus"])
+        self.assertIsNotNone(res["days_to_95pct_profitable"])
+
+    def test_daily_low_setting_never_95(self):
+        res = ev_mod.simulate_fixed_setting_daily(self.model, 1, 8000, [1, 365])
+        ms = {r["day"]: r for r in res["milestones"]}
+        # 低設定はプラス確率が日数とともに減る＆95%到達なし
+        self.assertLess(ms[365]["prob_plus"], ms[1]["prob_plus"])
+        self.assertIsNone(res["days_to_95pct_profitable"])
+
 
 class TestValidationDiscipline(unittest.TestCase):
     """検証規律そのものが機能することを（軽量設定で）確認する。"""

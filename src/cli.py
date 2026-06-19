@@ -98,10 +98,26 @@ def cmd_infer(args) -> int:
             print(f"    ※ {dist['caveat']}")
             yen["distribution"] = dist
 
+    rec = None
+    if args.recover_yen:
+        rec = ev_mod.spins_to_recover(post, model["payout"], args.recover_yen,
+                                      bet_per_game=args.bet, yen_per_coin=args.coin_yen)
+        print(f"--- 回収に必要なゲーム数（{args.recover_yen:+,.0f}円を期待ベースで） ---")
+        if rec["recoverable"]:
+            print(f"  1Gあたり期待純益: {rec['per_game_yen']:+.2f}円  "
+                  f"(期待機械割 {rec['expected_payout']:.2f}%)")
+            print(f"  必要ゲーム数: 約 {rec['required_games']:,.0f}G")
+        else:
+            print(f"  回収不能（期待機械割 {rec['expected_payout']:.2f}% ≤ 100%、-EV）。"
+                  f"回せば回すほど期待値マイナス → やめ")
+        print(f"  ※ {rec['caveat']}")
+
     if args.json:
         out = {"summary": summary, "decision": dec}
         if yen is not None:
             out["yen_ev"] = yen
+        if rec is not None:
+            out["recover"] = rec
         print(json.dumps(out, ensure_ascii=False, default=str))
     return 0
 
@@ -189,6 +205,31 @@ def cmd_learn(args) -> int:
     return 0
 
 
+def cmd_daily(args) -> int:
+    """設定を固定して毎日打ち続けた場合の累積収支の推移（長期EV vs 分散）。"""
+    model = post_mod.load_machine(args.machine)
+    default_ms = [1, 7, 30, 90, 180, 365]
+    milestones = sorted({d for d in default_ms if d <= args.days} | {args.days})
+    res = ev_mod.simulate_fixed_setting_daily(
+        model, args.setting, args.games_per_day, milestones, yen_per_coin=args.coin_yen)
+    print(f"機種: {model.get('machine')}  設定{res['setting']}（機械割{res['machine_rate']:.1f}%）"
+          f"  {res['games_per_day']:,}G/日 を毎日")
+    print(f"1日: 期待 {res['daily_mu_yen']:+,.0f}円 / 標準偏差 {res['daily_sigma_yen']:,.0f}円")
+    print(f"{'日数':>6}{'期待累計':>14}{'90%帯(下〜上)':>30}{'プラス確率':>12}")
+    for r in res["milestones"]:
+        band = f"{r['p5']:+,.0f} 〜 {r['p95']:+,.0f}"
+        print(f"{r['day']:>6}{r['mean_yen']:>+14,.0f}{band:>30}{_fmt_pct(r['prob_plus']):>12}")
+    d95 = res["days_to_95pct_profitable"]
+    if d95 is not None:
+        print(f"95%の確率でプラス収支になる日数: 約 {d95:.0f} 日")
+    else:
+        print("95%プラス到達: なし（期待値が0以下の設定）")
+    print(f"※ {res['caveat']}")
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, default=str))
+    return 0
+
+
 def cmd_validate(args) -> int:
     model = post_mod.load_machine(args.machine)
 
@@ -245,6 +286,8 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--trials", type=int, default=20000,
                     help="収支ブレ幅モンテカルロの試行数（既定20000）")
     pi.add_argument("--seed", type=int, default=0, help="モンテカルロ乱数seed")
+    pi.add_argument("--recover-yen", type=float, default=None, dest="recover_yen",
+                    help="この金額(円)を回収するのに必要なG数を期待ベースで逆算")
     pi.add_argument("--json", action="store_true")
     pi.set_defaults(func=cmd_infer)
 
@@ -268,6 +311,15 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--iters", type=int, default=100)
     pl.add_argument("--out", default=None, help="推定事前をJSONで書き出す先")
     pl.set_defaults(func=cmd_learn)
+
+    pd = sub.add_parser("daily", help="設定固定で毎日打ち続けた場合の累積収支推移（長期EV vs 分散）")
+    pd.add_argument("--machine", required=True)
+    pd.add_argument("--setting", type=int, required=True, help="固定する設定(1-6)")
+    pd.add_argument("--games-per-day", type=int, default=8000, dest="games_per_day")
+    pd.add_argument("--days", type=int, default=365, help="最大日数")
+    pd.add_argument("--coin-yen", type=float, default=20.0, dest="coin_yen")
+    pd.add_argument("--json", action="store_true")
+    pd.set_defaults(func=cmd_daily)
 
     pv = sub.add_parser("validate", help="検証スイートを実行")
     pv.add_argument("--machine", required=True)

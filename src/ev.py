@@ -96,6 +96,34 @@ def slot_yen_ev(
     }
 
 
+def spins_to_recover(
+    posterior: Mapping[int, float],
+    payout: Mapping,
+    target_yen: float,
+    bet_per_game: int = 3,
+    yen_per_coin: float = 20.0,
+) -> Dict:
+    """目標額(円)を期待ベースで回収するのに必要なゲーム数（必要回転数の逆算）。
+
+    事後加重の期待機械割 E[M] から 1Gあたり期待純益 = bet×(E[M]/100-1)×yen_per_coin。
+    必要G数 = target_yen / 1Gあたり期待純益。E[M]<=100（-EV）なら回収不能（None）。
+
+    注意: これは**期待値ベースの目安**。短期は分散支配で、この回転数を回しても
+    実収支は大きく振れる（session_pnl_distribution の帯を併用すること）。
+    """
+    exp_m = expected_payout(posterior, payout)
+    per_game_yen = bet_per_game * (exp_m / 100.0 - 1.0) * yen_per_coin
+    recoverable = per_game_yen > 0
+    return {
+        "target_yen": target_yen,
+        "expected_payout": exp_m,
+        "per_game_yen": per_game_yen,
+        "recoverable": recoverable,
+        "required_games": (target_yen / per_game_yen) if recoverable else None,
+        "caveat": "期待値ベースの目安。短期は分散支配で実収支は大きく振れる。-EV設定では回収不能。",
+    }
+
+
 def _poisson(rng: random.Random, lam: float) -> int:
     """Poisson 乱数（標準ライブラリのみ）。BIG/REG は希少イベントなので二項の良近似。
 
@@ -192,6 +220,81 @@ def session_pnl_distribution(
         "worst": yens[0],
         "best": yens[-1],
         "caveat": "設定不確実性＋ボーナス分散を反映。payout_coins は代表値[unverified]のため帯の幅は近似。",
+    }
+
+
+def _normal_cdf(x: float) -> float:
+    """標準正規分布の累積分布 Φ(x)（math.erf のみ）。"""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def simulate_fixed_setting_daily(
+    model: Mapping,
+    setting: int,
+    games_per_day: int,
+    day_milestones,
+    yen_per_coin: float = 20.0,
+) -> Dict:
+    """設定を固定して毎日打ち続けた場合の、累積収支の推移（解析・正規近似）。
+
+    1日の収支は独立同分布。BIG/REG 回数 ~ Poisson(λ) なので
+        1日の期待コイン = bet×games×(機械割/100 - 1)
+        1日の分散コイン = λ_BIG×BIG払出² + λ_REG×REG払出²   （残余は決定値→分散0）
+    D日後の累積は平均 D×μ、標準偏差 √D×σ の正規分布。
+    → +EV設定は平均が線形に伸び、標準偏差は√Dなので、いつか帯が0を上回り勝ち確定に近づく。
+       -EV設定は逆に沈む。これが「長期EVは効く／短期は分散支配」の数値的な姿。
+
+    Returns:
+        per_day（μ・σ）と、各マイルストン日数での 平均・90%帯・プラス確率、
+        および「95%の確率でプラスになる日数」。
+    """
+    pc = model.get("payout_coins")
+    if not pc:
+        raise ValueError("model に payout_coins が無いため計算できません")
+    bet = pc.get("bet_per_game", 3)
+    big_pay, reg_pay = pc["BIG"], pc["REG"]
+    s = str(setting)
+    p_big = 1.0 / model["events"]["BIG"]["one_in"][s]
+    p_reg = 1.0 / model["events"]["REG"]["one_in"][s]
+    m = float(model["payout"].get(s, model["payout"].get(setting)))
+
+    lam_big = games_per_day * p_big
+    lam_reg = games_per_day * p_reg
+    daily_mu = bet * games_per_day * (m / 100.0 - 1.0) * yen_per_coin
+    daily_var = (lam_big * big_pay ** 2 + lam_reg * reg_pay ** 2) * (yen_per_coin ** 2)
+    daily_sigma = math.sqrt(daily_var)
+
+    rows = []
+    for d in day_milestones:
+        mean = d * daily_mu
+        sigma = math.sqrt(d) * daily_sigma
+        if sigma > 0:
+            p_plus = _normal_cdf(mean / sigma)
+        else:
+            p_plus = 1.0 if mean > 0 else 0.0
+        rows.append({
+            "day": d,
+            "mean_yen": mean,
+            "p5": mean - 1.645 * sigma,
+            "p95": mean + 1.645 * sigma,
+            "prob_plus": p_plus,
+        })
+
+    # 95%の確率でプラスになる日数: √d·μ/σ ≥ 1.645  →  d ≥ (1.645·σ/μ)²
+    days_to_95 = None
+    if daily_mu > 0 and daily_sigma > 0:
+        days_to_95 = (1.645 * daily_sigma / daily_mu) ** 2
+
+    return {
+        "setting": setting,
+        "machine_rate": m,
+        "games_per_day": games_per_day,
+        "yen_per_coin": yen_per_coin,
+        "daily_mu_yen": daily_mu,
+        "daily_sigma_yen": daily_sigma,
+        "milestones": rows,
+        "days_to_95pct_profitable": days_to_95,
+        "caveat": "設定を毎日固定で打てる理想化（実際はホールが日々変える）。payout_coinsの分散は代表値。正規近似。",
     }
 
 

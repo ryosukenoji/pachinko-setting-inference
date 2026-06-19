@@ -68,6 +68,17 @@ python3 -m src.cli learn --csv <観測.csv> --out data/priors/hall.json
 python3 -m src.cli infer --machine data/machines/my_juggler_v.json \
     --games 5200 --BIG 12 --REG 9 --budou 820 --prior data/priors/hall.json
 
+# 回収に必要なG数（期待ベースの逆算）: 2万円を取り返すには？
+python3 -m src.cli infer --machine data/machines/my_juggler_v.json \
+    --games 4000 --BIG 17 --REG 16 --budou 690 --recover-yen 20000
+#   → 期待機械割104% / 1Gあたり+2.41円 / 必要 約8,310G  ※期待ベース。短期は分散支配
+
+# 設定を固定して毎日打ち続けたら（長期EV vs 分散の可視化）
+python3 -m src.cli daily --machine data/machines/my_juggler_v.json --setting 6
+#   → 設定6: 1日+45,120円, 95%プラス到達 約1日, 365日で+1,646万円(90%帯つき)
+python3 -m src.cli daily --machine data/machines/my_juggler_v.json --setting 3
+#   → 設定3(99.9%): 1日の標準偏差±2.8万円に隠れるが、プラス確率は1年で49%→37%へ沈む
+
 # 検証スイート（ネガコン / 必要サンプル / キャリブレーション / EVバックテスト）
 python3 -m src.cli validate --machine data/machines/my_juggler_v.json
 
