@@ -213,3 +213,37 @@ def pachinko_border_decision(
         "play": spins_per_1k > borderline,
         "margin": spins_per_1k - borderline,
     }
+
+
+def pachinko_yen_ev(
+    spins_per_1k: float,
+    borderline: float,
+    total_spins: int,
+    yen_per_unit: float = 1000.0,
+) -> Dict:
+    """パチンコ: 回転率とボーダーから、予定総回転数での円建て期待収支。
+
+        投資(円)   = yen_per_unit × total_spins / R        （R回転で yen_per_unit 円消費）
+        期待収支(円) = 投資 × (R − B) / B = yen_per_unit × total_spins × (R−B)/(R×B)
+
+    R=B で期待収支0、R>B で +EV。スロットの機械割EVと違い設定の事後は無く、
+    観測した回転率（区間推定の点推定）から決定論的に算出する。
+
+    前提（簡略化）: 等価・現金投資ベース。持ち玉比率・交換ギャップ・出玉変動は未考慮
+    （非等価では実効ボーダーが上がるぶん楽観側に出るので、borderline 側で吸収すること）。
+    """
+    R, B = spins_per_1k, borderline
+    if R <= 0 or B <= 0:
+        raise ValueError("回転率・ボーダーは正の値である必要があります")
+    invest = yen_per_unit * total_spins / R
+    ev = invest * (R - B) / B
+    return {
+        "spins_per_1k": R,
+        "borderline": B,
+        "total_spins": total_spins,
+        "invest_yen": invest,
+        "expected_yen": ev,
+        "ev_ratio": (R - B) / B,             # 期待収支 / 投資
+        "ev_per_1k_invest": yen_per_unit * (R - B) / B,
+        "play": R > B,
+    }

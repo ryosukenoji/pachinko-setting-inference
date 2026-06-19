@@ -110,8 +110,18 @@ def cmd_border(args) -> int:
     dec = ev_mod.pachinko_border_decision(args.rate, args.border)
     print(f"実測回転率: {dec['spins_per_1k']:.2f} 回/¥1000   ボーダー: {dec['borderline']:.2f}")
     print(f"判定: {'打つ (+EV)' if dec['play'] else 'やめ (-EV)'}  margin={dec['margin']:+.2f}")
+    yev = None
+    if args.spins:
+        yev = ev_mod.pachinko_yen_ev(args.rate, args.border, args.spins)
+        print(f"--- 円建て期待収支（{args.spins:,}回転 / 等価4円・現金投資前提） ---")
+        print(f"  投資額: {yev['invest_yen']:,.0f}円   期待収支: {yev['expected_yen']:+,.0f}円"
+              f"   期待収支率: {yev['ev_ratio'] * 100:+.1f}%")
+        print(f"  ※ 持ち玉比率・非等価ギャップは未考慮。非等価ならボーダーを上げて補正。")
     if args.json:
-        print(json.dumps(dec, ensure_ascii=False))
+        out = dict(dec)
+        if yev is not None:
+            out["yen_ev"] = yev
+        print(json.dumps(out, ensure_ascii=False))
     return 0
 
 
@@ -241,6 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
     pb = sub.add_parser("border", help="パチンコ回転率→ボーダー判定")
     pb.add_argument("--rate", type=float, required=True, help="実測 ¥1000あたり回転数")
     pb.add_argument("--border", type=float, required=True, help="ボーダーライン")
+    pb.add_argument("--spins", type=int, default=None, help="予定総回転数。指定で円建て期待収支を出力")
     pb.add_argument("--json", action="store_true")
     pb.set_defaults(func=cmd_border)
 

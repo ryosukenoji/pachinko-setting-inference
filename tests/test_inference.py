@@ -124,6 +124,23 @@ class TestEV(unittest.TestCase):
         self.assertTrue(ev_mod.pachinko_border_decision(19.5, 18.2)["play"])
         self.assertFalse(ev_mod.pachinko_border_decision(17.0, 18.2)["play"])
 
+    def test_pachinko_yen_ev_hand_calc(self):
+        # R=20, B=18, 4000回転: 投資=4000/20*1000=200,000円
+        # 期待収支 = 200000*(20-18)/18 = +22,222円
+        res = ev_mod.pachinko_yen_ev(20.0, 18.0, 4000)
+        self.assertAlmostEqual(res["invest_yen"], 200000.0, places=2)
+        self.assertAlmostEqual(res["expected_yen"], 200000.0 * 2 / 18, places=2)
+        self.assertTrue(res["play"])
+
+    def test_pachinko_yen_ev_at_border_is_zero(self):
+        res = ev_mod.pachinko_yen_ev(18.0, 18.0, 4000)
+        self.assertAlmostEqual(res["expected_yen"], 0.0, places=6)
+        self.assertFalse(res["play"])
+
+    def test_pachinko_yen_ev_below_border_negative(self):
+        res = ev_mod.pachinko_yen_ev(16.0, 18.0, 4000)
+        self.assertLess(res["expected_yen"], 0)
+
     def test_yen_ev_setting6_matches_hand_calc(self):
         # 全質量が設定6(109.4%)、5000G・3枚・20円/枚:
         # net = 3*5000*(1.094-1) = 1410枚 → 28,200円

@@ -56,8 +56,9 @@ python3 -m src.cli infer --machine data/machines/my_juggler_v.json \
 #     中央値 +11,368円 / 50%帯 -5,673〜+29,001 / 90%帯 -28,713〜+55,881円 / プラス確率67%
 #   ※ 短期はヒキの分散が支配的。EVは長期平均で、1セッションの実収支は帯の中で大きく振れる
 
-# パチンコ: 回転率 → ボーダー判定
-python3 -m src.cli border --rate 19.5 --border 18.2
+# パチンコ: 回転率 → ボーダー判定（+ 予定回転数で円建て期待収支）
+python3 -m src.cli border --rate 19.5 --border 18.2 --spins 4000
+#   → 投資 205,128円 / 期待収支 +14,652円 (+7.1%)  ※等価・現金投資前提
 
 # ホール内の複数台を観測CSVから一括推定し、EVエッジ順にランキング
 python3 -m src.cli batch --csv tests/fixtures/observations_sample.csv
