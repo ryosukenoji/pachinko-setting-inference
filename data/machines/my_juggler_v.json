@@ -1,6 +1,9 @@
 {
   "machine": "マイジャグラーV",
-  "schema": "setting-difference-table/v1",
+  "generation": "6号機",
+  "type": "A-normal",
+  "main_signal": "REG",
+  "schema": "setting-difference-table/v2",
   "settings": [1, 2, 3, 4, 5, 6],
   "_note_units": "events.<name>.one_in は『1/x』表記の x。likelihood は p = 1/x に変換して使う。other カテゴリは 1 - Σp_event で自動算出（multinomial）。",
   "provenance": {

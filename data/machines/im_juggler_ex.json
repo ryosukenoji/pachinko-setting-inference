@@ -1,6 +1,9 @@
 {
   "machine": "アイムジャグラーEX",
-  "schema": "setting-difference-table/v1",
+  "generation": "6号機",
+  "type": "A-normal",
+  "main_signal": "REG",
+  "schema": "setting-difference-table/v2",
   "settings": [1, 2, 3, 4, 5, 6],
   "_note_units": "my_juggler_v.json と同形式。ぶどう設定差が薄く（設定1-5はほぼ同値、設定6のみ優遇）、設定看破が『効きにくい』機種の代表（design_proposal.md §3 A の注意・README §3 の機種依存を実証）。版: 6号機 アイムジャグラーEX。",
   "provenance": {

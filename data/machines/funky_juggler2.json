@@ -1,0 +1,60 @@
+{
+  "machine": "ファンキージャグラー2",
+  "generation": "6号機",
+  "type": "A-normal",
+  "main_signal": "REG",
+  "schema": "setting-difference-table/v2",
+  "settings": [1, 2, 3, 4, 5, 6],
+  "_note_units": "events.<name>.one_in は『1/x』表記の x。p=1/x。other は 1-Σp_event。BIG/REGに加えぶどうも設定差あり（マイジャグラー型。アイムのような『6のみ優遇』ではない）。",
+  "provenance": {
+    "status": "cross-checked",
+    "retrieved": "2026-06-19",
+    "sources": [
+      {
+        "url": "https://juggler7.com/funky2/settei-hanbetu.html",
+        "provides": "BIG/REG/合算/機械割 全6設定（内部整合: 合算=BIG+REG を確認。設定6 合算1/119.6）",
+        "type": "攻略サイト解析値"
+      },
+      {
+        "url": "https://jugglertopics.jp/fj2/299/",
+        "provides": "ぶどう確率 全6設定（1/5.94→1/5.70）・単独ボーナス確率",
+        "type": "攻略サイト実測値"
+      }
+    ],
+    "caveats": [
+      "BIG/REG/合算/機械割は juggler7.com で内部整合（合算=BIG+REG）。設定1=97.0% / 設定6=109.0%。",
+      "ぶどうは公式非公表の実測推定。設定6のぶどうは juggler7.com が約1/5.9、jugglertopics.jp が1/5.70 と割れる。本テーブルは全6設定が揃う jugglertopics を採用。",
+      "BIG=240・REG=96 はジャグラー系共通の獲得枚数 [confirmed]。",
+      "Web検索の要約では設定6合算を1/150.7と誤記する例があった（実際は1/119.6）。一次表で照合して回避。"
+    ]
+  },
+  "events": {
+    "BIG": {
+      "label": "BIG確率",
+      "one_in": { "1": 266.4, "2": 259.0, "3": 256.0, "4": 249.2, "5": 240.1, "6": 219.9 }
+    },
+    "REG": {
+      "label": "REG確率（主信号。設定1と6で大きく開く）",
+      "one_in": { "1": 439.8, "2": 407.1, "3": 366.1, "4": 322.8, "5": 299.3, "6": 262.1 }
+    },
+    "budou": {
+      "label": "ぶどう確率（設定差あり・公式非公表の実測推定）",
+      "one_in": { "1": 5.94, "2": 5.92, "3": 5.90, "4": 5.83, "5": 5.80, "6": 5.70 }
+    }
+  },
+  "payout": {
+    "_units": "機械割（%）。100超で理論上プラス。",
+    "1": 97.0,
+    "2": 98.5,
+    "3": 99.8,
+    "4": 102.0,
+    "5": 104.3,
+    "6": 109.0
+  },
+  "payout_coins": {
+    "_note": "役別 獲得枚数 [confirmed: ジャグラー系共通 BIG=240・REG=96]。短期分散用。",
+    "bet_per_game": 3,
+    "BIG": 240,
+    "REG": 96
+  }
+}

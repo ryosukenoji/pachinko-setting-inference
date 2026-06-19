@@ -15,13 +15,16 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
+import os
 import sys
 
 from . import dataio as io_mod
 from . import ev as ev_mod
 from . import learn as learn_mod
 from . import posterior as post_mod
+from . import schema as schema_mod
 from . import validate as val_mod
 
 
@@ -230,6 +233,30 @@ def cmd_daily(args) -> int:
     return 0
 
 
+def cmd_tables(args) -> int:
+    """登録機種の一覧 + 各テーブルの整合性チェック。"""
+    files = sorted(glob.glob(os.path.join(args.machines_dir, "*.json")))
+    print(f"{'id':<22}{'機種':<18}{'版':<8}{'型':<10}{'主信号':<7}{'状態':<14}{'整合'}")
+    print("-" * 92)
+    all_ok = True
+    for path in files:
+        with open(path, encoding="utf-8") as f:
+            m = json.load(f)
+        issues = schema_mod.validate_machine(m, strict=True)
+        ok = "OK" if not issues else f"NG({len(issues)})"
+        if issues:
+            all_ok = False
+        prov = m.get("provenance", {}).get("status", "-")
+        mid = os.path.splitext(os.path.basename(path))[0]
+        print(f"{mid:<22}{m.get('machine', '?'):<18}{m.get('generation', '?'):<8}"
+              f"{m.get('type', '?'):<10}{m.get('main_signal', '-'):<7}{prov:<14}{ok}")
+        for i in issues:
+            print(f"    - {i}")
+    print("-" * 92)
+    print(f"合計 {len(files)} 機種  /  整合性: {'全OK' if all_ok else '要修正あり'}")
+    return 0 if all_ok else 1
+
+
 def cmd_validate(args) -> int:
     model = post_mod.load_machine(args.machine)
 
@@ -320,6 +347,10 @@ def build_parser() -> argparse.ArgumentParser:
     pd.add_argument("--coin-yen", type=float, default=20.0, dest="coin_yen")
     pd.add_argument("--json", action="store_true")
     pd.set_defaults(func=cmd_daily)
+
+    pt = sub.add_parser("tables", help="登録機種の一覧 + テーブル整合性チェック")
+    pt.add_argument("--machines-dir", default="data/machines", dest="machines_dir")
+    pt.set_defaults(func=cmd_tables)
 
     pv = sub.add_parser("validate", help="検証スイートを実行")
     pv.add_argument("--machine", required=True)
