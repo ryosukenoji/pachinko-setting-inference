@@ -6,7 +6,9 @@ design_proposal.md §3 の A（設定看破→EV）と B（ボーダー理論）
 
 from __future__ import annotations
 
-from typing import Dict, Mapping
+import math
+import random
+from typing import Dict, List, Mapping, Optional
 
 
 def expected_payout(posterior: Mapping[int, float], payout: Mapping) -> float:
@@ -91,6 +93,105 @@ def slot_yen_ev(
         "best": max(per, key=lambda x: x["yen"]),
         "worst": min(per, key=lambda x: x["yen"]),
         "caveat": "設定不確実性のみ反映。1セッションの短期分散（ヒキ）は別途で、短期では支配的。",
+    }
+
+
+def _poisson(rng: random.Random, lam: float) -> int:
+    """Poisson 乱数（標準ライブラリのみ）。BIG/REG は希少イベントなので二項の良近似。
+
+    λ が大きい領域は正規近似に切り替え（Knuth 法の反復回数を抑える）。
+    """
+    if lam <= 0:
+        return 0
+    if lam > 30:
+        return max(0, int(round(rng.gauss(lam, math.sqrt(lam)))))
+    target = math.exp(-lam)
+    k = 0
+    p = 1.0
+    while True:
+        k += 1
+        p *= rng.random()
+        if p <= target:
+            return k - 1
+
+
+def session_pnl_distribution(
+    posterior: Mapping[int, float],
+    model: Mapping,
+    games: int,
+    trials: int = 20000,
+    yen_per_coin: float = 20.0,
+    seed: int = 0,
+) -> Dict:
+    """設定不確実性（事後）＋ 短期分散（ヒキ）を合成した、1セッション収支の分布。
+
+    各試行: 設定 k を事後からサンプル → その設定で BIG/REG 回数を Poisson サンプル
+    → ボーナス払出＋（機械割に整合させた）残余の決定値 − 投入、で純増枚数を得る。
+
+    期待値は構成上 slot_yen_ev と一致（残余を機械割に合わせて補完するため）。
+    分散は BIG/REG 回数のゆらぎ × 純増枚数から出る（payout_coins は分散の大きさにのみ影響）。
+
+    Returns:
+        mean_yen / prob_plus / percentiles{p5,p25,p50,p75,p95} / worst・best（サンプル端） など。
+    """
+    pc = model.get("payout_coins")
+    if not pc:
+        raise ValueError("model に payout_coins が無いため短期分散を計算できません")
+    bet = pc.get("bet_per_game", 3)
+    big_pay = pc["BIG"]
+    reg_pay = pc["REG"]
+    payout = model["payout"]
+
+    settings: List[int] = sorted(posterior)
+    weights = [posterior[k] for k in settings]
+
+    # 設定ごとに p_big/p_reg と残余（機械割に整合する決定値）を前計算
+    p_big = {k: 1.0 / model["events"]["BIG"]["one_in"][str(k)] for k in settings}
+    p_reg = {k: 1.0 / model["events"]["REG"]["one_in"][str(k)] for k in settings}
+    total_bet = bet * games
+    residual = {}
+    for k in settings:
+        m = float(payout.get(str(k), payout.get(k)))
+        expected_total_payout = (m / 100.0) * total_bet
+        expected_bonus = games * (p_big[k] * big_pay + p_reg[k] * reg_pay)
+        residual[k] = expected_total_payout - expected_bonus  # ぶどう・小役等の決定値
+
+    rng = random.Random(seed)
+    yens = []
+    plus = 0
+    for _ in range(trials):
+        k = rng.choices(settings, weights=weights, k=1)[0]
+        n_big = _poisson(rng, games * p_big[k])
+        n_reg = _poisson(rng, games * p_reg[k])
+        total_payout = n_big * big_pay + n_reg * reg_pay + residual[k]
+        net_coins = total_payout - total_bet
+        y = net_coins * yen_per_coin
+        yens.append(y)
+        if y > 0:
+            plus += 1
+
+    yens.sort()
+
+    def pct(q):
+        idx = min(int(q * trials), trials - 1)
+        return yens[idx]
+
+    return {
+        "games": games,
+        "trials": trials,
+        "yen_per_coin": yen_per_coin,
+        "mean_yen": sum(yens) / trials,
+        "prob_plus": plus / trials,
+        "percentiles": {
+            "p5": pct(0.05),
+            "p25": pct(0.25),
+            "p50": pct(0.50),
+            "p75": pct(0.75),
+            "p95": pct(0.95),
+        },
+        "worst": yens[0],
+        "best": yens[-1],
+        "caveat": "設定不確実性＋ボーナス分散を反映。payout_coins は代表値[unverified]のため帯の幅は近似。",
     }
 
 

@@ -85,6 +85,19 @@ def cmd_infer(args) -> int:
                   f"→ {p['yen']:+,.0f}円")
         print(f"  ※ {yen['caveat']}")
 
+        if model.get("payout_coins"):
+            dist = ev_mod.session_pnl_distribution(
+                post, model, args.play_games, trials=args.trials,
+                yen_per_coin=args.coin_yen, seed=args.seed)
+            pp = dist["percentiles"]
+            print(f"  --- 収支のブレ幅（設定不確実性＋短期分散/ヒキ, {dist['trials']:,}試行） ---")
+            print(f"    中央値(p50): {pp['p50']:+,.0f}円")
+            print(f"    50%予想帯(p25〜p75): {pp['p25']:+,.0f} 〜 {pp['p75']:+,.0f}円")
+            print(f"    90%予想帯(p5〜p95): {pp['p5']:+,.0f} 〜 {pp['p95']:+,.0f}円")
+            print(f"    プラス収支確率: {_fmt_pct(dist['prob_plus'])}")
+            print(f"    ※ {dist['caveat']}")
+            yen["distribution"] = dist
+
     if args.json:
         out = {"summary": summary, "decision": dec}
         if yen is not None:
@@ -219,6 +232,9 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--bet", type=int, default=3, help="1G掛けコイン（既定3枚）")
     pi.add_argument("--coin-yen", type=float, default=20.0, dest="coin_yen",
                     help="換金レート 円/枚（既定20=等価）")
+    pi.add_argument("--trials", type=int, default=20000,
+                    help="収支ブレ幅モンテカルロの試行数（既定20000）")
+    pi.add_argument("--seed", type=int, default=0, help="モンテカルロ乱数seed")
     pi.add_argument("--json", action="store_true")
     pi.set_defaults(func=cmd_infer)
 

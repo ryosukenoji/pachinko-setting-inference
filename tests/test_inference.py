@@ -147,6 +147,33 @@ class TestEV(unittest.TestCase):
         self.assertAlmostEqual(res["expected_yen"], manual, places=6)
         self.assertGreaterEqual(res["best"]["yen"], res["worst"]["yen"])
 
+    def test_pnl_distribution_mean_matches_analytic_ev(self):
+        # モンテカルロ分布の平均は解析的な期待収支(slot_yen_ev)に一致するはず
+        post = {1: 0.1, 2: 0.1, 3: 0.2, 4: 0.25, 5: 0.2, 6: 0.15}
+        analytic = ev_mod.slot_yen_ev(post, self.model["payout"], games=5000)["expected_yen"]
+        dist = ev_mod.session_pnl_distribution(post, self.model, games=5000,
+                                               trials=30000, seed=1)
+        # 相対誤差 2% 以内（モンテカルロ誤差）
+        self.assertLess(abs(dist["mean_yen"] - analytic), abs(analytic) * 0.02 + 2000)
+
+    def test_pnl_percentiles_ordered_and_band_positive_width(self):
+        post = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 1.0}
+        dist = ev_mod.session_pnl_distribution(post, self.model, games=5000,
+                                               trials=20000, seed=2)
+        p = dist["percentiles"]
+        self.assertLessEqual(p["p5"], p["p25"])
+        self.assertLessEqual(p["p25"], p["p50"])
+        self.assertLessEqual(p["p50"], p["p75"])
+        self.assertLessEqual(p["p75"], p["p95"])
+        # 短期分散があるので帯には幅がある（p95 > p5）
+        self.assertGreater(p["p95"], p["p5"])
+        self.assertTrue(0.0 <= dist["prob_plus"] <= 1.0)
+
+    def test_pnl_requires_payout_coins(self):
+        post = {1: 1.0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0}
+        with self.assertRaises(ValueError):
+            ev_mod.session_pnl_distribution(post, {"payout": {}, "events": {}}, games=100)
+
 
 class TestValidationDiscipline(unittest.TestCase):
     """検証規律そのものが機能することを（軽量設定で）確認する。"""
