@@ -20,6 +20,7 @@ import json
 import os
 import sys
 
+from . import ceiling as ceiling_mod
 from . import dataio as io_mod
 from . import ev as ev_mod
 from . import learn as learn_mod
@@ -233,6 +234,38 @@ def cmd_daily(args) -> int:
     return 0
 
 
+def cmd_ceiling(args) -> int:
+    """軸B: 天井・ゾーン狙いの期待値（現在ゲーム数 → 残りEV / 狙い目ボーダー）。"""
+    yen_per_game = 1000.0 / args.games_per_1k
+    benefit_yen = args.benefit_coins * args.coin_yen
+    early_yen = args.early_coins * args.coin_yen
+    hit_rate = (1.0 / args.hit_one_in) if args.hit_one_in else None
+
+    res = ceiling_mod.ceiling_ev(args.ceiling, args.current, benefit_yen, yen_per_game,
+                                 hit_rate=hit_rate, early_hit_yen=early_yen)
+    be = ceiling_mod.breakeven_current(args.ceiling, benefit_yen, yen_per_game,
+                                       hit_rate=hit_rate, early_hit_yen=early_yen)
+
+    print(f"天井 {args.ceiling:,}G / 現在 {args.current:,}G / 恩恵 {args.benefit_coins:,}枚"
+          f"(≒{benefit_yen:,.0f}円) / コイン持ち {args.games_per_1k:g}G per ¥1000"
+          + (f" / 通常初当り 1/{args.hit_one_in:g}" if hit_rate else " / モデル=保守(天井まで)"))
+    if res["model"] == "past-ceiling":
+        print(f"  {res['note']}")
+        return 0
+    print(f"  残り {res['remaining_games']:,}G  期待消化 {res['expected_games']:,.0f}G  "
+          f"天井到達率 {_fmt_pct(res['prob_reach_ceiling'])}")
+    print(f"  期待投資 {res['invest_yen']:,.0f}円  期待リワード {res['reward_yen']:,.0f}円")
+    print(f"  期待収支: {res['expected_yen']:+,.0f}円  → "
+          f"{'打つ (+EV)' if res['play'] else 'やめ (-EV)'}")
+    if be is not None:
+        print(f"  狙い目ボーダー: {be:,}G 以上回っている捨て台なら +EV")
+    else:
+        print(f"  狙い目ボーダー: なし（この恩恵/コストでは天井狙い不成立）")
+    if args.json:
+        print(json.dumps({"result": res, "breakeven_current": be}, ensure_ascii=False))
+    return 0
+
+
 def cmd_tables(args) -> int:
     """登録機種の一覧 + 各テーブルの整合性チェック。"""
     files = sorted(glob.glob(os.path.join(args.machines_dir, "*.json")))
@@ -347,6 +380,22 @@ def build_parser() -> argparse.ArgumentParser:
     pd.add_argument("--coin-yen", type=float, default=20.0, dest="coin_yen")
     pd.add_argument("--json", action="store_true")
     pd.set_defaults(func=cmd_daily)
+
+    pc = sub.add_parser("ceiling", help="軸B: 天井・ゾーン狙いの期待値（現在G→残りEV/狙い目ボーダー）")
+    pc.add_argument("--ceiling", type=int, required=True, help="天井ゲーム数")
+    pc.add_argument("--current", type=int, required=True, help="現在ゲーム数（台表示）")
+    pc.add_argument("--benefit-coins", type=float, required=True, dest="benefit_coins",
+                    help="天井恩恵の期待枚数")
+    pc.add_argument("--games-per-1k", type=float, default=33.0, dest="games_per_1k",
+                    help="通常時コイン持ち（¥1000あたりG, 既定33）")
+    pc.add_argument("--coin-yen", type=float, default=20.0, dest="coin_yen",
+                    help="換金レート 円/枚（既定20）")
+    pc.add_argument("--hit-one-in", type=float, default=None, dest="hit_one_in",
+                    help="通常時初当り 1/x（指定で早い当たりを織り込む）")
+    pc.add_argument("--early-coins", type=float, default=0.0, dest="early_coins",
+                    help="通常当たりの期待枚数（early-hitモデル用）")
+    pc.add_argument("--json", action="store_true")
+    pc.set_defaults(func=cmd_ceiling)
 
     pt = sub.add_parser("tables", help="登録機種の一覧 + テーブル整合性チェック")
     pt.add_argument("--machines-dir", default="data/machines", dest="machines_dir")
